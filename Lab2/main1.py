@@ -102,7 +102,7 @@ AA2 = b2 / DX2
 def odnor_disp():
     m1 = min(RKRtable, key=lambda x: abs(x - m))
     p = 0
-    for ruv in (ruv1, ruv2, ruv3):
+    for ruv in (ruv1, ruv2, ruv3):                #Використовую 
         if ruv > RKRtable[m1][0]:
             return False
         for rkr in range(len(RKRtable[m1])):
