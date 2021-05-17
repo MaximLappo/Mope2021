@@ -198,6 +198,7 @@ def planning_matrix_linear(n, m, x_range):
 
 
 def reg_equation(x, y, n):
+    global B
     y_average = [round(sum(i) / len(i), 2) for i in y]
     mx1 = sum(x[:, 1]) / n
     mx2 = sum(x[:, 2]) / n
@@ -268,12 +269,19 @@ def linear(n, m):
         print('Математична модель не адекватна експериментальним даним')
         return False
 
+
+
 def main(n, m):
     main_1 = linear(n, m)
     if not main_1:
         interaction_effect = with_interaction_effect(n, m)
         if not interaction_effect:
             main(n, m)
+    print("---------------------------------------------------------")
+    print("Додаткове завдання")
+    print("Рівняння із використанням не значимих кофіцієнтів")
+    print(f'y = {B[0]} + {B[1]}*x1 + {B[2]}*x2 + {B[3]}*x3')
+    print("---------------------------------------------------------")
 
 
 if __name__ == '__main__':
