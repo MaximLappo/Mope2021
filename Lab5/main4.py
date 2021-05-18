@@ -1,203 +1,242 @@
 import random
 import sklearn.linear_model as lm
-from scipy.stats import f, t
+from pyDOE2 import ccdesign
+import numpy as np
+import scipy.stats
 from functools import partial
-from pyDOE2 import *
+import sys
+import time
 
 
-def regr(x, b):
-    y = sum([x[i] * b[i] for i in range(len(x))])
-    return y
+average_time = []
+for i in range(100):
+
+    x_range = [(-7, 10), (-4, 6), (-5, 3)]
+
+    def regression(x, b):
+        return sum([x[i] * b[i] for i in range(len(x))])
 
 
-x_range = ((-7, 10), (-4, 6), (-5, 3))
-x_aver_max = sum([x[1] for x in x_range]) / 3
-x_aver_min = sum([x[0] for x in x_range]) / 3
-y_max = 200 + int(x_aver_max)
-y_min = 200 + int(x_aver_min)
+    def s_kv(y, y_aver, n, m):
+        res = []
+        for i in range(n):
+            s = sum([(y_aver[i] - y[i][j]) ** 2 for j in range(m)]) / m
+            res.append(round(s, 3))
+        return res
 
 
-def s_kv(y, y_aver, n, m):
-    res = []
-    for i in range(n):
-        s = sum([(y_aver[i] - y[i][j]) ** 2 for j in range(m)]) / m
-        res.append(round(s, 3))
-    return res
+    def plan_matrix5(n, m):
+        y = np.zeros(shape=(n, m))
+        for i in range(n):
+            for j in range(m):
+                y[i][j] = random.randint(y_min, y_max)
 
+        if n > 14:
+            no = n - 14
+        else:
+            no = 1
+        x_norm = ccdesign(3, center=(0, no))
+        x_norm = np.insert(x_norm, 0, 1, axis=1)
 
-def plnMatr5(n, m):
-    print(f'\nГенеруємо матрицю планування для n = {n}, m = {m}')
-    y = np.zeros(shape=(n, m))
-    for i in range(n):
-        for j in range(m):
-            y[i][j] = random.randint(y_min, y_max)
-    if n > 14:
-        no = n - 14
-    else:
-        no = 1
-    x_norm = ccdesign(3, center=(0, no))
-    x_norm = np.insert(x_norm, 0, 1, axis=1)
-    for i in range(4, 11):
-        x_norm = np.insert(x_norm, i, 0, axis=1)
-    l = 1.215
-    for i in range(len(x_norm)):
-        for j in range(len(x_norm[i])):
-            if x_norm[i][j] < -1 or x_norm[i][j] > 1:
-                if x_norm[i][j] < 0:
-                    x_norm[i][j] = -l
+        for i in range(4, 11):
+            x_norm = np.insert(x_norm, i, 0, axis=1)
+
+        l = 1.215
+
+        for i in range(len(x_norm)):
+            for j in range(len(x_norm[i])):
+                if x_norm[i][j] < -1 or x_norm[i][j] > 1:
+                    if x_norm[i][j] < 0:
+                        x_norm[i][j] = -l
+                    else:
+                        x_norm[i][j] = l
+
+        def add_sq_nums(x):
+            for i in range(len(x)):
+                x[i][4] = x[i][1] * x[i][2]
+                x[i][5] = x[i][1] * x[i][3]
+                x[i][6] = x[i][2] * x[i][3]
+                x[i][7] = x[i][1] * x[i][3] * x[i][2]
+                x[i][8] = x[i][1] ** 2
+                x[i][9] = x[i][2] ** 2
+                x[i][10] = x[i][3] ** 2
+            return x
+
+        x_norm = add_sq_nums(x_norm)
+
+        x = np.ones(shape=(len(x_norm), len(x_norm[0])), dtype=np.int64)
+        for i in range(8):
+            for j in range(1, 4):
+                if x_norm[i][j] == -1:
+                    x[i][j] = x_range[j - 1][0]
                 else:
-                    x_norm[i][j] = l
+                    x[i][j] = x_range[j - 1][1]
 
-    def add_sq_nums(x):
-        for i in range(len(x)):
-            x[i][4] = x[i][1] * x[i][2]
-            x[i][5] = x[i][1] * x[i][3]
-            x[i][6] = x[i][2] * x[i][3]
-            x[i][7] = x[i][1] * x[i][3] * x[i][2]
-            x[i][8] = x[i][1] ** 2
-            x[i][9] = x[i][2] ** 2
-            x[i][10] = x[i][3] ** 2
-        return x
+        for i in range(8, len(x)):
+            for j in range(1, 3):
+                x[i][j] = (x_range[j - 1][0] + x_range[j - 1][1]) / 2
 
-    x_norm = add_sq_nums(x_norm)
-    x = np.ones(shape=(len(x_norm), len(x_norm[0])), dtype=np.int64)
-    for i in range(8):
-        for j in range(1, 4):
-            if x_norm[i][j] == -1:
-                x[i][j] = x_range[j - 1][0]
-            else:
-                x[i][j] = x_range[j - 1][1]
-    for i in range(8, len(x)):
-        for j in range(1, 3):
-            x[i][j] = (x_range[j - 1][0] + x_range[j - 1][1]) / 2
-    dx = [x_range[i][1] - (x_range[i][0] + x_range[i][1]) / 2 for i in range(3)]
-    x[8][1] = l * dx[0] + x[9][1]
-    x[9][1] = -l * dx[0] + x[9][1]
-    x[10][2] = l * dx[1] + x[9][2]
-    x[11][2] = -l * dx[1] + x[9][2]
-    x[12][3] = l * dx[2] + x[9][3]
-    x[13][3] = -l * dx[2] + x[9][3]
-    x = add_sq_nums(x)
-    print('\nX:\n', x)
-    print('\nX нормоване:\n')
-    for i in x_norm:
-        print([round(x, 2) for x in i])
-    print('\nY:\n', y)
-    return x, y, x_norm
+        dx = [x_range[i][1] - (x_range[i][0] + x_range[i][1]) / 2 for i in range(3)]
+
+        x[8][1] = l * dx[0] + x[9][1]
+        x[9][1] = -l * dx[0] + x[9][1]
+        x[10][2] = l * dx[1] + x[9][2]
+        x[11][2] = -l * dx[1] + x[9][2]
+        x[12][3] = l * dx[2] + x[9][3]
+        x[13][3] = -l * dx[2] + x[9][3]
+
+        x = add_sq_nums(x)
+
+        print('\nМатриця X:\n')
+        for i in x:
+            for j in i:
+                print("{0:5}".format(j), end='|')
+            print()
+        print('\nX нормоване:\n')
+        for i in x_norm:
+            for j in i:
+                print("{0:5.3}".format(j), end='|')
+            print()
+        print('Y')
+        for i in y:
+            for j in i:
+                print("{0:5.8}".format(j), end='|')
+            print()
+
+        return x, y, x_norm
 
 
-def findСoef(X, Y, norm=False):
-    skm = lm.LinearRegression(fit_intercept=False)
-    skm.fit(X, Y)
-    B = skm.coef_
+    def find_coef(X, Y, norm=False):
+        skm = lm.LinearRegression(fit_intercept=False)
+        skm.fit(X, Y)
+        B = skm.coef_
 
-    if norm == 1:
-        print('\nКоефіцієнти рівняння регресії з нормованими X:')
-    else:
-        print('\nКоефіцієнти рівняння регресії:')
-    B = [round(i, 3) for i in B]
-    print(B)
-    print('\nРезультат рівняння зі знайденими коефіцієнтами:\n', np.dot(X, B))
-    return B
-
-
-def kritCochr(y, y_aver, n, m):
-    f1 = m - 1
-    f2 = n
-    q = 0.05
-    S_kv = s_kv(y, y_aver, n, m)
-    Gp = max(S_kv) / sum(S_kv)
-    print('\nПеревірка за критерієм Кохрена')
-    return Gp
+        if norm == 1:
+            print('\nКоефіцієнти рівняння регресії з нормованими X:')
+        else:
+            print('\nКоефіцієнти рівняння регресії:')
+        B = [round(i, 3) for i in B]
+        print(B)
+        print('\nРезультат рівняння зі знайденими коефіцієнтами:\n', np.dot(X, B))
+        return B
 
 
-def Cochr(f1, f2, q=0.05):
-    q1 = q / f1
-    fisher_value = f.ppf(q=1 - q1, dfn=f2, dfd=(f1 - 1) * f2)
-    return fisher_value / (fisher_value + f1 - 1)
+    def kriteriy_cochrana(y, y_aver, n, m):
+        f1 = m - 1
+        f2 = n
+        q = 0.05
+        S_kv = s_kv(y, y_aver, n, m)
+        Gp = max(S_kv) / sum(S_kv)
+        print('\nПеревірка за критерієм Кохрена')
+        return Gp
 
 
-def bs(x, y_aver, n):
-    res = [sum(1 * y for y in y_aver) / n]
-    for i in range(len(x[0])):
-        b = sum(j[0] * j[1] for j in zip(x[:, i], y_aver)) / n
-        res.append(b)
-    return res
+    def kohren(f1, f2, q=0.05):
+        q1 = q / f1
+        fisher_value = scipy.stats.f.ppf(q=1 - q1, dfn=f2, dfd=(f1 - 1) * f2)
+        return fisher_value / (fisher_value + f1 - 1)
 
 
-def kritStud(x, y, y_aver, n, m):
-    S_kv = s_kv(y, y_aver, n, m)
-    s_kv_aver = sum(S_kv) / n
-    s_Bs = (s_kv_aver / n / m) ** 0.5
-    Bs = bs(x, y_aver, n)
-    ts = [round(abs(B) / s_Bs, 3) for B in Bs]
-    return ts
+    def bs(x, y_aver, n):
+        res = [sum(1 * y for y in y_aver) / n]
+
+        for i in range(len(x[0])):
+            b = sum(j[0] * j[1] for j in zip(x[:, i], y_aver)) / n
+            res.append(b)
+        return res
 
 
-def kritFish(y, y_aver, y_new, n, m, d):
-    S_ad = m / (n - d) * sum([(y_new[i] - y_aver[i]) ** 2 for i in range(len(y))])
-    S_kv = s_kv(y, y_aver, n, m)
-    S_kv_aver = sum(S_kv) / n
-    return S_ad / S_kv_aver
+    def kriteriy_studenta(x, y, y_aver, n, m):
+        S_kv = s_kv(y, y_aver, n, m)
+        s_kv_aver = sum(S_kv) / n
+
+        s_Bs = (s_kv_aver / n / m) ** 0.5
+        Bs = bs(x, y_aver, n)
+        ts = [round(abs(B) / s_Bs, 3) for B in Bs]
+
+        return ts
 
 
-def audit(X, Y, B, n, m):
+    def kriteriy_fishera(y, y_aver, y_new, n, m, d):
+        S_ad = m / (n - d) * sum([(y_new[i] - y_aver[i]) ** 2 for i in range(len(y))])
+        S_kv = s_kv(y, y_aver, n, m)
+        S_kv_aver = sum(S_kv) / n
+
+        return S_ad / S_kv_aver
+
+
+    x_aver_max = sum([x[1] for x in x_range]) / 3
+    x_aver_min = sum([x[0] for x in x_range]) / 3
+
+    y_max = 200 + int(x_aver_max)
+    y_min = 200 + int(x_aver_min)
+
+    X5, Y5, X5_norm = plan_matrix5(15, 6)
+
+    y5_aver = [round(sum(i) / len(i), 3) for i in Y5]
+    B5 = find_coef(X5, y5_aver)
+
     print('\n\tПеревірка рівняння:')
-    f1 = m - 1
-    f2 = n
+    f1 = 5
+    f2 = 15
     f3 = f1 * f2
     q = 0.05
-    student = partial(t.ppf, q=1 - q)
+
+    student = partial(scipy.stats.t.ppf, q=1 - q)
     t_student = student(df=f3)
-    G_kr = Cochr(f1, f2)
-    y_aver = [round(sum(i) / len(i), 3) for i in Y]
+
+    G_kr = kohren(f1, f2)
+
+    y_aver = [round(sum(i) / len(i), 3) for i in Y5]
     print('\nСереднє значення y:', y_aver)
-    disp = s_kv(Y, y_aver, n, m)
+
+    disp = s_kv(Y5, y_aver, f2, 6)
     print('Дисперсія y:', disp)
-    Gp = kritCochr(Y, y_aver, n, m)
+
+    Gp = kriteriy_cochrana(Y5, y_aver, f2, 6)
     print(f'Gp = {Gp}')
     if Gp < G_kr:
-        print(f'З ймовірністю {1 - q} дисперсії однорідні.')
+        print(f'З ймовірністю', 1 - q, 'дисперсії однорідні.')
     else:
         print("Необхідно збільшити кількість дослідів")
-        m += 1
-        Main(n, m)
-    ts = kritStud(X[:, 1:], Y, y_aver, n, m)
+
+    ts = kriteriy_studenta(X5_norm[:, 1:], Y5, y_aver, f2, 6)
     print('\nКритерій Стьюдента:\n', ts)
     res = [t for t in ts if t > t_student]
-    final_k = [B[i] for i in range(len(ts)) if ts[i] in res]
+    time_start = time.time()
+    final_k = [B5[i] for i in range(len(ts)) if ts[i] in res]
     print('\nКоефіцієнти {} статистично незначущі, тому ми виключаємо їх з рівняння.'.format(
-        [round(i, 3) for i in B if i not in final_k]))
+        [round(i, 3) for i in B5 if i not in final_k]))
+    average_time.append(-(time_start - time.time()) if time_start - time.time() != 0 else 0.005)
+
     y_new = []
-    for j in range(n):
-        y_new.append(regr([X[j][i] for i in range(len(ts)) if ts[i] in res], final_k))
+    for j in range(f2):
+        y_new.append(regression([X5_norm[j][i] for i in range(len(ts)) if ts[i] in res], final_k))
+
     print(f'\nЗначення "y" з коефіцієнтами {final_k}')
     print(y_new)
+
     d = len(res)
-    if d >= n:
+    if d >= f2:
         print('\nF4 <= 0')
         print('')
-        return
-    f4 = n - d
-    F_p = kritFish(Y, y_aver, y_new, n, m, d)
-    fisher = partial(f.ppf, q=0.95)
+        sys.exit()
+
+    f4 = f2 - d
+
+    F_p = kriteriy_fishera(Y5, y_aver, y_new, f2, 6, d)
+
+    fisher = partial(scipy.stats.f.ppf, q=0.95)
     f_t = fisher(dfn=f4, dfd=f3)
     print('\nПеревірка адекватності за критерієм Фішера')
     print('Fp =', F_p)
     print('F_t =', f_t)
     if F_p < f_t:
-        print('Математична модель адекватна експериментальним даним')
+        print('Математична модель є адекватною')
     else:
-        print('Математична модель не адекватна експериментальним даним')
-
-def Main(n, m):
-    X5, Y5, X5_norm = plnMatr5(n, m)
-    y5_aver = [round(sum(i) / len(i), 3) for i in Y5]
-    B5 = findСoef(X5, y5_aver)
-    audit(X5_norm, Y5, B5, n, m)
-
-
-if __name__ == '__main__':
-    Main(16, 4)
-
-
+        print('Математична модель не є адекватною')
+print("-------------------------------------------------------------")
+print("Додаткове задання")
+print(average_time)
+print(sum(average_time) / len(average_time), "середній час пошуку значимих коефіцієнтів")
+print("-------------------------------------------------------------")
